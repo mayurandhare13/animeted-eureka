@@ -1,0 +1,63 @@
+<!-- Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. -->
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Device Permission Repro</title>
+    <link href="officethemes.css" rel="stylesheet" type="text/css" />
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <link rel="stylesheet" href="https://res-1.cdn.office.net/files/fabric-cdn-prod_20230815.002/office-ui-fabric-core/11.1.0/css/fabric.min.css"/>
+    <link href="taskpane.css" rel="stylesheet" type="text/css" />
+    <style>
+        .btn-group { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+        .btn-group .ms-Button { width: 100%; }
+        .step-label { font-weight: 600; margin-right: 6px; }
+        #status { max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; margin-top: 12px; }
+        .status-success { color: green; }
+        .status-error { color: red; }
+        .status-info { color: #0078d4; }
+    </style>
+</head>
+
+<body class="ms-font-m ms-welcome ms-Fabric">
+    <header class="ms-welcome__header ms-bgColor-neutralLighter">
+        <h1 class="ms-font-su">Mic Permission Repro</h1>
+        <p class="ms-font-m">Issue <a href="https://github.com/OfficeDev/office-js/issues/5726" target="_blank">#5726</a></p>
+    </header>
+    <section id="sideload-msg" class="ms-welcome__main">
+        <h2 class="ms-font-xl">Please sideload your add-in to see app body.</h2>
+    </section>
+    <main id="app-body" class="ms-welcome__main" style="display: none;">
+        <h2 class="ms-font-xl">Microphone Permission API</h2>
+        <p class="ms-font-m">Simple interface to test Office DevicePermission API</p>
+
+        <div id="permission-hint" class="permission-hint" style="display: none;"></div>
+
+        <div class="btn-group">
+            <div role="button" id="check-permission" class="ms-Button ms-Button--primary ms-font-m">
+                <span class="ms-Button-label">1. Check Permission Status</span>
+            </div>
+            <div role="button" id="request-permission" class="ms-Button ms-Button--hero ms-font-m">
+                <span class="ms-Button-label">2. Request Microphone Permission</span>
+            </div>
+            <div role="button" id="get-devices" class="ms-Button ms-Button--primary ms-font-m">
+                <span class="ms-Button-label">3. Get Microphone Devices</span>
+            </div>
+        </div>
+
+        <div id="permission-status" style="display: none; margin: 12px 0; padding: 12px; border-radius: 4px; background: #f3f2f1;">
+            <div id="status-text" class="ms-font-m"></div>
+            <div id="permission-type" class="ms-font-s" style="margin-top: 8px; font-style: italic;"></div>
+        </div>
+
+        <div id="device-list" style="display: none; margin: 12px 0;">
+            <h3 class="ms-font-l">Microphone Devices:</h3>
+            <ul id="devices" style="list-style: none; padding: 0;"></ul>
+        </div>
+    </main>
+</body>
+
+</html>
