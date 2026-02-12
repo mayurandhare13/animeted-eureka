@@ -19,6 +19,11 @@ Office.onReady((info) => {
 
 let hasShownPermissionHint = false;
 
+type DeviceInfo = {
+  label: string;
+  deviceId: string;
+};
+
 // ============================================
 // 1. Check Permission Status
 // ============================================
@@ -122,12 +127,28 @@ export async function requestMicrophonePermission() {
     } else {
       // Permission was already granted previously
       updateStatus("✅ Permission already granted (using existing permission)", "success");
-      updatePermissionType("This permission was granted earlier. Type: 'Always' if persistent after tab close, 'Allow Once' if requires re-grant after tab close.");
+      updatePermissionType(
+        "This permission was granted earlier. Type: 'Always' if persistent after tab close, 'Allow Once' if requires re-grant after tab close."
+      );
 
       hidePermissionHint();
 
       // Test that we can access microphone
       await waitForPermissionPropagation();
+      if (useDialogFlow()) {
+        const dialogResult = await openMicDialog("request");
+        handleDialogPermissionResult(dialogResult);
+        return;
+      }
+
+      // if (isSafari()) {
+      //   updateStatus("⚠️ Safari blocks microphone access in Office on the web", "error");
+      //   updatePermissionType(
+      //     "This is a permissions-policy restriction from the host. Use Chrome/Firefox or desktop to test getUserMedia."
+      //   );
+      //   return;
+      // }
+
       testMicrophoneAccess();
     }
   } catch (error) {
@@ -152,6 +173,21 @@ export async function getMicrophoneDevices() {
     console.log("Getting microphone devices...");
     updateStatus("Enumerating microphone devices...", "info");
 
+    if (useDialogFlow()) {
+      const dialogResult = await openMicDialog("devices");
+      handleDialogDevicesResult(dialogResult);
+      return;
+    }
+
+    // if (isSafari()) {
+    //   updateStatus("⚠️ Safari blocks microphone access in Office on the web", "error");
+    //   updatePermissionType(
+    //     "This is a permissions-policy restriction from the host. Use Chrome/Firefox or desktop to test getUserMedia."
+    //   );
+    //   clearDeviceList();
+    //   return;
+    // }
+
     if (!navigator.mediaDevices) {
       updateStatus("❌ MediaDevices API not available", "error");
       return;
@@ -164,10 +200,10 @@ export async function getMicrophoneDevices() {
 
     // Enumerate devices while stream is active - labels will be populated
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const audioInputs = devices.filter(device => device.kind === 'audioinput');
+    const audioInputs = devices.filter((device) => device.kind === "audioinput");
 
     // Stop the stream immediately after enumeration
-    stream.getTracks().forEach(track => track.stop());
+    stream.getTracks().forEach((track) => track.stop());
 
     console.log(`Found ${audioInputs.length} audio input device(s)`);
 
@@ -180,7 +216,13 @@ export async function getMicrophoneDevices() {
 
     updateStatus(`✅ Found ${audioInputs.length} microphone device(s)`, "success");
     updatePermissionType("Devices are accessible with permission granted.");
-    displayDevices(audioInputs, true);
+    displayDevices(
+      audioInputs.map((device) => ({
+        label: device.label || "(empty label)",
+        deviceId: device.deviceId,
+      })),
+      true
+    );
   } catch (error) {
     console.error("Get devices error:", error);
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -231,12 +273,12 @@ function updatePermissionType(message: string) {
   }
 }
 
-function displayDevices(devices: MediaDeviceInfo[], hasLabels: boolean) {
+function displayDevices(devices: DeviceInfo[], hasLabels: boolean) {
   const deviceListContainer = document.getElementById("device-list");
   const devicesList = document.getElementById("devices");
 
   if (deviceListContainer && devicesList) {
-    devicesList.innerHTML = '';
+    devicesList.innerHTML = "";
 
     devices.forEach((device, index) => {
       const li = document.createElement("li");
@@ -249,7 +291,7 @@ function displayDevices(devices: MediaDeviceInfo[], hasLabels: boolean) {
       const deviceId = device.deviceId.substring(0, 20) + "...";
 
       li.innerHTML = `
-        <div style="font-weight: 600;">${index + 1}. ${hasLabels ? '🎤' : '⚠️'} ${label}</div>
+        <div style="font-weight: 600;">${index + 1}. ${hasLabels ? "🎤" : "⚠️"} ${label}</div>
         <div style="font-size: 11px; color: #605E5C; margin-top: 4px;">ID: ${deviceId}</div>
       `;
 
@@ -290,12 +332,16 @@ function hidePermissionHint() {
 async function testMicrophoneAccess() {
   try {
     console.log("Testing microphone access...");
+    // if (isSafari()) {
+    //   console.warn("Safari blocks getUserMedia in Office on the web due to permissions-policy.");
+    //   return;
+    // }
     // await waitForPermissionPropagation();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     console.log("✅ Microphone access successful:", stream);
 
     // Stop the stream immediately (we just wanted to test access)
-    stream.getTracks().forEach(track => track.stop());
+    stream.getTracks().forEach((track) => track.stop());
   } catch (error) {
     console.error("❌ Microphone access test failed:", error);
   }
@@ -303,6 +349,114 @@ async function testMicrophoneAccess() {
 
 function isFirefox() {
   return navigator.userAgent.toLowerCase().includes("firefox");
+}
+
+function isSafari() {
+  const ua = navigator.userAgent.toLowerCase();
+  return (
+    ua.includes("safari") &&
+    !ua.includes("chrome") &&
+    !ua.includes("chromium") &&
+    !ua.includes("crios") &&
+    !ua.includes("fxios") &&
+    !ua.includes("edgios")
+  );
+}
+
+function useDialogFlow() {
+  const toggle = document.getElementById("use-dialog-toggle") as HTMLInputElement | null;
+  return Boolean(toggle && toggle.checked);
+}
+
+function getDialogUrl() {
+  return new URL("dialog.html", window.location.href).toString();
+}
+
+type DialogResult =
+  | { type: "permission-granted" }
+  | { type: "permission-denied"; error?: string }
+  | { type: "devices"; devices: DeviceInfo[] }
+  | { type: "error"; error: string };
+
+function openMicDialog(action: "request" | "devices"): Promise<DialogResult> {
+  return new Promise((resolve) => {
+    Office.context.ui.displayDialogAsync(
+      getDialogUrl(),
+      { height: 45, width: 40, displayInIframe: false },
+      (asyncResult) => {
+        if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
+          resolve({ type: "error", error: asyncResult.error.message });
+          return;
+        }
+
+        const dialog = asyncResult.value;
+
+        const closeAndResolve = (result: DialogResult) => {
+          dialog.close();
+          resolve(result);
+        };
+
+        dialog.addEventHandler(Office.EventType.DialogMessageReceived, (arg) => {
+          try {
+            const message = JSON.parse(arg.message) as DialogResult | { type: "ready" };
+            if (message.type === "ready") {
+              dialog.messageChild(JSON.stringify({ type: "start", action }));
+              return;
+            }
+
+            closeAndResolve(message as DialogResult);
+          } catch (error) {
+            closeAndResolve({ type: "error", error: "Failed to parse dialog response." });
+          }
+        });
+
+        dialog.addEventHandler(Office.EventType.DialogEventReceived, () => {
+          closeAndResolve({ type: "error", error: "Dialog closed before completing the request." });
+        });
+      }
+    );
+  });
+}
+
+function handleDialogPermissionResult(result: DialogResult) {
+  if (result.type === "permission-granted") {
+    updateStatus("✅ Microphone permission granted via dialog", "success");
+    updatePermissionType("Top-level browser permission granted.");
+    return;
+  }
+
+  if (result.type === "permission-denied") {
+    updateStatus("⛔ Microphone permission denied in dialog", "error");
+    updatePermissionType(result.error || "User denied permission.");
+    return;
+  }
+
+  if (result.type === "error") {
+    updateStatus(`❌ Dialog error: ${result.error}`, "error");
+    updatePermissionType("");
+  }
+}
+
+function handleDialogDevicesResult(result: DialogResult) {
+  if (result.type === "devices") {
+    updateStatus(`✅ Found ${result.devices.length} microphone device(s)`, "success");
+    updatePermissionType("Devices are accessible with dialog permission.");
+    displayDevices(result.devices, true);
+    return;
+  }
+
+  if (result.type === "permission-denied") {
+    updateStatus("⚠️ Microphone access denied in dialog.", "error");
+    updatePermissionType(result.error || "User denied permission.");
+    clearDeviceList();
+    return;
+  }
+
+  if (result.type === "error") {
+    updateStatus(`❌ Dialog error: ${result.error}`, "error");
+    updatePermissionType("");
+    clearDeviceList();
+  }
 }
 
 async function waitForPermissionPropagation() {
